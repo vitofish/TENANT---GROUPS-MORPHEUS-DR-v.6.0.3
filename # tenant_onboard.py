@@ -18,6 +18,7 @@
 
 import requests
 import json
+import time
 import re
 #py2
 #from urllib import urlencode
@@ -39,7 +40,7 @@ SVC_MORPHEUS_VMWARE_SECRET = str(Cypher(morpheus=morpheus, ssl_verify=False).get
 
 KEYCLOAK_CLIENT_ID = "rest-client"
 KEYCLOAK_CLIENT_SECRET = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/KeycloakRestClientSecret"))
-KEYCLOAK_HOST = "account.cloud.toscana.it/auth"
+KEYCLOAK_HOST = "10.156.160.62:8080/auth"
 
 
 # User Inputs
@@ -76,7 +77,15 @@ NAGIOS_TAG = NAGIOS_TAG_DICT.get(SUB_SYSTEM.upper(), 'NAGIOS')
 #Tenant Globals
 MORPHEUS_TENANT_ADMIN_PASSWORD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/defaultpwd"))
 MORPHEUS_TENANT_ADMIN_EMAIL = "tenantadmin@dxc.it"
- 
+MORPHEUS_TENANT_ADMIN_LASTNAME = "Admin"
+
+MORPHEUS_CLUSTER_USER_PASSWORD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/clusteruserpwd"))
+MORPHEUS_CLUSTER_USER_ROLE_SRC = "TENANT_ADMIN_TOSC"
+MORPHEUS_CLUSTER_USER_EMAIL = "ClusterUser@morpheusdata.com"
+MORPHEUS_CLUSTER_USER_USERNAME = "ClusterUser"
+MORPHEUS_CLUSTER_USER_LASTNAME = "User"
+MORPHEUS_CLUSTER_USER_FIRSTNAME = "Cluster"
+
 SAML_REDIRECT_URL = "https://" + KEYCLOAK_HOST + "/realms/Toscana/protocol/saml"
 SAML_LOGOUT_URL = "https://" + KEYCLOAK_HOST + "/realms/Toscana/protocol/saml"
 SAML_INCLUDE_REQUEST_PARAM = False
@@ -91,7 +100,7 @@ MORPHEUS_IDM_NAME = "Autenticazione con ARPA"
 
 #SNow Globals
 SNOW_HEADERS = { "Content-Type": "application/json", "Accept": "application/json" }
-SNOW_HOSTNAME = "regionetoscana.service-now.com"
+SNOW_HOSTNAME = "regionetoscanatest.service-now.com"
 SNOW_USER = 'morpheus'
 SNOW_PWD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/dxcsnowpass"))
 
@@ -194,22 +203,21 @@ def create_morpheus_tenant(morpheus_host, tenant_name, tenant_description, sub_d
     return tenant_id
  
  
-def create_morpheus_tenant_admin_user(morpheus_host, tenant_id, tenant_name, uid_suffix, tenant_admin_role_id, access_token, passw):
+def create_morpheus_tenant_user(morpheus_host, tenant_id, username, firstname, lastname, email, tenant_user_role_id, access_token, passwd):
     #log("Creating subtenant admin user")
     MORPHEUS_HEADERS["Authorization"] = "Bearer " + access_token
     url = "https://%s/api/accounts/%s/users" % (morpheus_host, tenant_id)
-    tenant_admin_user = "%s_%s" % (tenant_name.upper(), uid_suffix)
-    b = {"user": {"username": tenant_admin_user }}
-    b["user"]["email"] = MORPHEUS_TENANT_ADMIN_EMAIL
-    b["user"]["firstName"] = tenant_admin_user
-    b["user"]["lastName"] = "Admin" 
-    b["user"]["password"] = passw
-    b["user"]["roles"] = [{"id": tenant_admin_role_id}]
+    b = {"user": {"username": username }}
+    b["user"]["email"] = email
+    b["user"]["firstName"] = firstname
+    b["user"]["lastName"] = lastname 
+    b["user"]["password"] = passwd
+    b["user"]["roles"] = [{"id": tenant_user_role_id}]
     body=json.dumps(b)
     response = requests.post(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating tenant admin user '%s': Response code %s: %s" % (tenant_admin_user, response.status_code, response.text))
-        raise Exception("Error creating tenant admin user '%s': Response code %s: %s" % (tenant_admin_user, response.status_code, response.text))
+        print("Error creating tenant user '%s': Response code %s: %s" % (username, response.status_code, response.text))
+        raise Exception("Error creating tenant user '%s': Response code %s: %s" % (username, response.status_code, response.text))
  
     data = response.json()
     return data["user"]["id"]
@@ -285,29 +293,29 @@ def create_morpheus_group(morpheus_host, access_token, group_name, group_code):
     return data["group"]["id"]
  
  
-def set_morpheus_role_groups_custom(morpheus_host, access_token, role_id):
+def set_morpheus_role_groups_default(morpheus_host, access_token, role_id, access):
  
     url = "https://%s/api/roles/%s/update-permission" % (morpheus_host, role_id)
     MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
-    b = {"permissionCode": "ComputeSite", "access": "custom"}
+    b = {"permissionCode": "ComputeSite", "access": access}
     body = json.dumps(b)
     response = requests.put(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error updating role with id %s to 'custom' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
-        raise Exception("Error updating role with id %s to 'custom' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
+        print("Error updating default permission for role with id %s to 'read' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
+        raise Exception("Error updating default permission for role with id %s to 'read' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
     data = response.json()
 
 
-def set_morpheus_role_clouds_custom(morpheus_host, access_token, role_id):
+def set_morpheus_role_clouds_default(morpheus_host, access_token, role_id, access):
  
     url = "https://%s/api/roles/%s/update-permission" % (morpheus_host, role_id)
     MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
-    b = {"permissionCode": "ComputeZone", "access": "custom"}
+    b = {"permissionCode": "ComputeZone", "access": access}
     body = json.dumps(b)
     response = requests.put(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error updating role with id %s to 'custom' cloud access: Response code %s: %s" % (role_id, response.status_code, response.text))
-        raise Exception("Error updating role with id %s to 'cloud' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
+        print("Error updating default permission for role with id %s to 'read' cloud access: Response code %s: %s" % (role_id, response.status_code, response.text))
+        raise Exception("Error updating default permission for role with id %s to 'read' cloud access: Response code %s: %s" % (role_id, response.status_code, response.text))
     data = response.json()
  
  
@@ -342,19 +350,7 @@ def set_morpheus_role_group_access(morpheus_host, access_token, role_id, group_i
         print("Error updating role(%s) group(%s) access(%s): Response code %s: %s" % (role_id, group_id, access, response.status_code, response.text))
         raise Exception("Error updating role(%s) group(%s) access(%s): Response code %s: %s" % (role_id, group_id, access, response.status_code, response.text))
 
- 
-def set_morpheus_role_allgroup_access(morpheus_host, access_token, role_id, access):
- 
-    url = "https://%s/api/roles/%s/update-group" % (morpheus_host, role_id)
-    MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
-    b = {"allGroups": True, "access": access}
-    body = json.dumps(b)
-    response = requests.put(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
-    if not response.ok:
-        print("Error updating role(%s) allgroup access(%s): Response code %s: %s" % (role_id, access, response.status_code, response.text))
-        raise Exception("Error updating role(%s) allgroup access(%s): Response code %s: %s" % (role_id, access, response.status_code, response.text))
 
- 
 def get_morpheus_tenant_id_by_name(morpheus_host, tenant_name, access_token):
  
     url = "https://%s/api/accounts/?max=-1" % (morpheus_host)
@@ -561,7 +557,7 @@ def create_snow_cmp_group_record(tenant_sys_id, group, group_code):
 def get_keycloak_access_token(keycloak_host, keycloak_realm, client_id, client_secret):
 #Get temporary Keycloak API key from a keycloak rest-client
     header = {"Content-Type": "application/x-www-form-urlencoded; charset=utf-8"}
-    url = "https://%s/realms/%s/protocol/openid-connect/token" % (keycloak_host, keycloak_realm)
+    url = "http://%s/realms/%s/protocol/openid-connect/token" % (keycloak_host, keycloak_realm)
     b = {'client_id': client_id, 'client_secret': client_secret, 'grant_type':'client_credentials'}
     body=urlencode(b)
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
@@ -595,7 +591,7 @@ def get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, group_name, acc
                 if result != -1:
                     break
 
-    url = "https://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, start_group_id)
+    url = "http://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, start_group_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     response = requests.get(url, headers=header, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
@@ -642,7 +638,7 @@ def create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, group
 
     child_group_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, group_name, keycloak_access_token, parent_group_id, 1)
     if child_group_id == -1:    #child group does not exist: create and return group ID
-        url = "https://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
+        url = "http://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
         header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
         b = {"name": group_name}
         body = json.dumps(b)    
@@ -659,7 +655,7 @@ def move_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, group_n
 #Move existing subGroup (group_name, group_id) as child of parent_groupid
 #Depends on:
 # - get_keycloak_access_token
-    url = "https://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
+    url = "http://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"id": group_id, "name": group_name}
     body = json.dumps(b)    
@@ -674,7 +670,7 @@ def rename_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, new_g
 #Depends on:
 # - get_keycloak_access_token
 
-    url = "https://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, group_id)
+    url = "http://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, group_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"name": new_group_name}
     body = json.dumps(b)    
@@ -776,7 +772,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     print("creating keycloak client '%s' for tenant '%s'" % (tenant_entity_id, tenant_name))
 
     #create keycloak client
-    url = "https://%s/admin/realms/%s/clients" % (keycloak_host, keycloak_realm)
+    url = "http://%s/admin/realms/%s/clients" % (keycloak_host, keycloak_realm)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"clientId": tenant_entity_id, "name": "tenant " + tenant_name, "description": MORPHEUS_TENANT_DESCRIPTION, "redirectUris": [tenant_ap_acs_url], "protocol": "saml", "frontchannelLogout": True, "enabled": True, "attributes": {}}
     b["attributes"]["saml.assertion.signature"] = True
@@ -796,7 +792,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
         raise Exception("Error creating keycloak client for '%s': Response code %s: %s" % (tenant_name, response.status_code, response.text))
 
     #get client ID of the new client
-    url = "https://%s/admin/realms/%s/clients" % (keycloak_host, keycloak_realm)
+    url = "http://%s/admin/realms/%s/clients" % (keycloak_host, keycloak_realm)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     response = requests.get(url, headers=header, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
@@ -811,7 +807,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     print("creating keycloak attribute mappers for client '%s'" % (tenant_entity_id))
 
     #add client attribute mapper for Surname
-    url = "https://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
+    url = "http://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"name": "X500 surname", "protocol": "saml", "protocolMapper": "saml-user-property-mapper", "consentRequired": False, "config": {}}
     b["config"]["attribute.nameformat"] = "Basic"
@@ -827,7 +823,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     print("...created client attribute mapper for Surname")
 
     #add client attribute mapper for email
-    url = "https://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
+    url = "http://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"name": "X500 email", "protocol": "saml", "protocolMapper": "saml-user-property-mapper", "consentRequired": False, "config": {}}
     b["config"]["attribute.nameformat"] = "Basic"
@@ -843,7 +839,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     print("...created client attribute mapper for email")
 
     #add client attribute mapper for givenName
-    url = "https://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
+    url = "http://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"name": "X500 givenName", "protocol": "saml", "protocolMapper": "saml-user-property-mapper", "consentRequired": False, "config": {}}
     b["config"]["attribute.nameformat"] = "Basic"
@@ -859,7 +855,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     print("...created client attribute mapper for givenName")
 
     #add client attribute mapper for Group
-    url = "https://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
+    url = "http://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"name": "Group", "protocol": "saml", "protocolMapper": "saml-group-membership-mapper", "consentRequired": False, "config": {}}
     b["config"]["attribute.nameformat"] = "Basic"
@@ -877,7 +873,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     print("Creating keycloak client-role '%s' for client '%s'" % (tenant_name, tenant_entity_id))
 
     #create keycloak client-role for new client as tenant_name
-    url = "https://%s/admin/realms/%s/clients/%s/roles" % (keycloak_host, keycloak_realm, client_id)
+    url = "http://%s/admin/realms/%s/clients/%s/roles" % (keycloak_host, keycloak_realm, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"name": tenant_name, "composite": "false", "clientRole": "true"}
     body = json.dumps(b)
@@ -888,7 +884,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
         raise Exception("Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))    
 
     #get client-role id created for the new client as tenant_name
-    url = "https://%s/admin/realms/%s/clients/%s/roles" % (keycloak_host, keycloak_realm, client_id)
+    url = "http://%s/admin/realms/%s/clients/%s/roles" % (keycloak_host, keycloak_realm, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     response = requests.get(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
@@ -912,7 +908,7 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     #map client-role to IDM CMP_<tenant> group
     keycloak_tenant_base_id = get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, KEYCLOAK_TENANT_ROLES_BRANCH, access_token, "")
     cmp_tenant_group_id = get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, "CMP_" + tenant_name, access_token, keycloak_tenant_base_id)
-    url = "https://%s/admin/realms/%s/groups/%s/role-mappings/clients/%s" % (keycloak_host, keycloak_realm, cmp_tenant_group_id, client_id)
+    url = "http://%s/admin/realms/%s/groups/%s/role-mappings/clients/%s" % (keycloak_host, keycloak_realm, cmp_tenant_group_id, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = [{"id": clientrole_id, "name": tenant_name}]
     body = json.dumps(b)
@@ -986,17 +982,19 @@ else:
     tenant_base_role_id = create_morpheus_role(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, MORPHEUS_TENANT + "_Base_Role", tenant_base_role_source_id, "account")
  
     # Update tenant base role by sub-system suffix
-    set_morpheus_role_clouds_custom(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_base_role_id)
+    set_morpheus_role_clouds_default(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_base_role_id, "read")
     clouds_list = get_morpheus_clouds_list(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN)
     set_morpheus_tenant_role_cloud_access_by_suffix(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_base_role_id, SUB_SYSTEM, clouds_list)
 
     #create tenant
     tenant_id = create_morpheus_tenant(MORPHEUS_HOST, MORPHEUS_TENANT, MORPHEUS_TENANT_DESCRIPTION, MORPHEUS_TENANT_SUBDOMAIN, tenant_base_role_id, MORPHEUS_MASTER_TENANT_TOKEN)
  
-    # Create tenant admin user from multi-tenant role
+    # Create tenant admin user and cluster user from multi-tenant role
     print("Creating initial subtenant admin user....")
     initial_tenant_admin_role_id = get_morpheus_role_id_by_name(MORPHEUS_HOST, MORPHEUS_TENANT_ADMIN_ROLE_SRC, MORPHEUS_MASTER_TENANT_TOKEN)
-    initial_tenant_user_id = create_morpheus_tenant_admin_user(MORPHEUS_HOST, tenant_id, MORPHEUS_TENANT, "ADMIN", initial_tenant_admin_role_id, MORPHEUS_MASTER_TENANT_TOKEN, MORPHEUS_TENANT_ADMIN_PASSWORD)
+    tenant_admin_username = "%s_%s" % (MORPHEUS_TENANT.upper(), "ADMIN")
+    initial_tenant_user_id = create_morpheus_tenant_user(MORPHEUS_HOST, tenant_id, tenant_admin_username, tenant_admin_username, MORPHEUS_TENANT_ADMIN_LASTNAME, MORPHEUS_TENANT_ADMIN_EMAIL, initial_tenant_admin_role_id, MORPHEUS_MASTER_TENANT_TOKEN, MORPHEUS_TENANT_ADMIN_PASSWORD)
+    initial_tenant_cluseruser_id = create_morpheus_tenant_user(MORPHEUS_HOST, tenant_id, MORPHEUS_CLUSTER_USER_USERNAME, MORPHEUS_CLUSTER_USER_FIRSTNAME, MORPHEUS_CLUSTER_USER_LASTNAME, MORPHEUS_CLUSTER_USER_EMAIL, initial_tenant_admin_role_id, MORPHEUS_MASTER_TENANT_TOKEN, MORPHEUS_CLUSTER_USER_PASSWORD)
 
     # Generate tenant admin access token 
     print("Getting subtenant login token and base role IDs....")
@@ -1022,7 +1020,7 @@ else:
     # Create the Tenant Admin role and assign to initial admin user
     print("Create tenant admin role from base role and assigning to tenant admin....")
     tenant_admin_role_id = create_morpheus_role(MORPHEUS_HOST, tenant_access_token, MORPHEUS_TENANT + "_ADMIN", admin_role_base_id, "user")
-    #set_morpheus_role_groups_custom(MORPHEUS_HOST, tenant_access_token, tenant_admin_role_id)
+    #set_morpheus_role_groups_default(MORPHEUS_HOST, tenant_access_token, tenant_admin_role_id, "full")
     #assign_morpheus_role_to_user(MORPHEUS_HOST, tenant_access_token, tenant_admin_role_id, initial_tenant_user_id)
     
     # Add admin role IDM mapping
@@ -1046,8 +1044,8 @@ else:
         tenant_standard_role = "%s_%s_USERSTD" % (MORPHEUS_TENANT.upper(), group_name.upper())
         tenant_catalog_role_id = create_morpheus_role(MORPHEUS_HOST, tenant_access_token, tenant_catalog_role, catalog_role_base_id, "user")
         tenant_standard_role_id = create_morpheus_role(MORPHEUS_HOST, tenant_access_token, tenant_standard_role, standard_role_base_id, "user")
-        set_morpheus_role_groups_custom(MORPHEUS_HOST, tenant_access_token, tenant_catalog_role_id)
-        set_morpheus_role_groups_custom(MORPHEUS_HOST, tenant_access_token, tenant_standard_role_id)
+        set_morpheus_role_groups_default(MORPHEUS_HOST, tenant_access_token, tenant_catalog_role_id, "none")
+        set_morpheus_role_groups_default(MORPHEUS_HOST, tenant_access_token, tenant_standard_role_id, "none")
     
         # Assign relevant group access to tenant roles
         print("............assign role access for infra group " + group_name)
@@ -1064,7 +1062,7 @@ else:
     print("Creating SAML Identity Provider for tenant....")
     default_role_id = get_morpheus_role_id_by_name(MORPHEUS_HOST, MORPHEUS_TENANT_DEFAULT_ROLE, tenant_access_token)
     create_morpheus_saml_provider(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_id, idm_role_mappings, MORPHEUS_TENANT, default_role_id)
-    set_morpheus_role_allgroup_access(MORPHEUS_HOST, tenant_access_token, default_role_id, "read")
+    set_morpheus_role_groups_default(MORPHEUS_HOST, tenant_access_token, default_role_id, "read")
 
 
 if SNOW_SKIP:

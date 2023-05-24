@@ -15,8 +15,15 @@
 # Author: Fabrizio Montanini
 # Email: fabrizio.montanini@dxc.com
 # Change: morpheus-keycloak integration
+#
+# Date: 18 May 2023
+# Author: Fabrizio Montanini
+# Email: fabrizio.montanini@dxc.com
+# Change: role management made compliant with morpheus 6.0.3 changes
+
 
 import requests
+import time
 import json
 import sys
 #py2
@@ -34,7 +41,7 @@ MORPHEUS_TENANT_CTLG_ROLE_SRC = "USER_CATALOG_TOSC"
 MORPHEUS_TENANT_STD_ROLE_SRC = "USER_STD_TOSC"
 KEYCLOAK_REST_CLIENT_ID = "rest-client"
 KEYCLOAK_REST_CLIENT_SECRET = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/KeycloakRestClientSecret"))
-KEYCLOAK_HOST = "account.cloud.toscana.it/auth"
+KEYCLOAK_HOST = "10.156.160.62:8080/auth"
 
  
 #User Inputs 
@@ -69,7 +76,7 @@ MORPHEUS_TENANT_ADMIN_ROLES = ['TENANT_ADMIN_TOSC']
 
 #SNow Globals
 SNOW_HEADERS = { "Content-Type": "application/json", "Accept": "application/json" }
-SNOW_HOSTNAME = "regionetoscana.service-now.com"
+SNOW_HOSTNAME = "regionetoscanatest.service-now.com"
 SNOW_USER = 'morpheus'
 SNOW_PWD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/dxcsnowpass"))
 SNOW_OP_STATUS_RETIRED = "6"
@@ -226,16 +233,16 @@ def create_morpheus_role(morpheus_host, access_token, role_name, base_role_id, r
     return data["role"]["id"]
  
 
-def set_morpheus_role_groups_custom(morpheus_host, access_token, role_id):
+def set_morpheus_role_groups_default(morpheus_host, access_token, role_id, access):
  
     url = "https://%s/api/roles/%s/update-permission" % (morpheus_host, role_id)
     MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
-    b = {"permissionCode": "ComputeSite", "access": "custom"}
+    b = {"permissionCode": "ComputeSite", "access": access}
     body = json.dumps(b)
     response = requests.put(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error updating role with id %s to 'custom' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
-        raise Exception("Error updating role with id %s to 'custom' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
+        print("Error updating default permission for role with id %s to 'read' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
+        raise Exception("Error updating default permission for role with id %s to 'read' group access: Response code %s: %s" % (role_id, response.status_code, response.text))
     data = response.json()
 
 
@@ -357,7 +364,7 @@ def input_sanity_checks(morpheus_host, access_token, group_names_csv, group_code
 def get_keycloak_access_token(keycloak_host, keycloak_realm, client_id, client_secret):
 #Get temporary Keycloak API key from a keycloak rest-client
     header = {"Content-Type": "application/x-www-form-urlencoded; charset=utf-8"}
-    url = "https://%s/realms/%s/protocol/openid-connect/token" % (keycloak_host, keycloak_realm)
+    url = "http://%s/realms/%s/protocol/openid-connect/token" % (keycloak_host, keycloak_realm)
     b = {'client_id': client_id, 'client_secret': client_secret, 'grant_type':'client_credentials'}
     body=urlencode(b)
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
@@ -392,7 +399,7 @@ def get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, group_name, acc
                 if result != -1:
                     break
 
-    url = "https://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, start_group_id)
+    url = "http://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, start_group_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     response = requests.get(url, headers=header, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
@@ -439,7 +446,7 @@ def create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, group
 
     child_group_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, group_name, keycloak_access_token, parent_group_id, 1)
     if child_group_id == -1:    #child group does not exist: create and return group ID
-        url = "https://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
+        url = "http://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
         header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
         b = {"name": group_name}
         body = json.dumps(b)    
@@ -457,7 +464,7 @@ def move_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, group_n
 #Depends on:
 # - get_keycloak_access_token
 
-    url = "https://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
+    url = "http://%s/admin/realms/%s/groups/%s/children" % (keycloak_host, keycloak_realm, parent_group_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"id": group_id, "name": group_name}
     body = json.dumps(b)    
@@ -472,7 +479,7 @@ def rename_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, new_g
 #Depends on:
 # - get_keycloak_access_token
 
-    url = "https://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, group_id)
+    url = "http://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, group_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     b = {"name": new_group_name}
     body = json.dumps(b)    
@@ -631,8 +638,8 @@ if 1 == 1:
         tenant_standard_role_name = "%s_%s_USERSTD" % (tenant_name.upper(), group_name.upper())
         tenant_catalog_role_id = create_morpheus_role(MORPHEUS_HOST, MORPHEUS_TENANT_TOKEN, tenant_catalog_role_name, catalog_role_base_id, "user")
         tenant_standard_role_id = create_morpheus_role(MORPHEUS_HOST, MORPHEUS_TENANT_TOKEN, tenant_standard_role_name, standard_role_base_id, "user")
-        set_morpheus_role_groups_custom(MORPHEUS_HOST, MORPHEUS_TENANT_TOKEN, tenant_catalog_role_id)
-        set_morpheus_role_groups_custom(MORPHEUS_HOST, MORPHEUS_TENANT_TOKEN, tenant_standard_role_id)
+        set_morpheus_role_groups_default(MORPHEUS_HOST, MORPHEUS_TENANT_TOKEN, tenant_catalog_role_id, "none")
+        set_morpheus_role_groups_default(MORPHEUS_HOST, MORPHEUS_TENANT_TOKEN, tenant_standard_role_id, "none")
     
         # Assign relevant group access to tenant roles
         print("............assign role access for infra group " + group_name)

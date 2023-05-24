@@ -11,14 +11,20 @@
 # Author: Fabrizio Montanini
 # Email: fabrizio.montanini@dxc.com
 # Change: morpheus-keycloak integration
+#
+# Date: 18 May 2023
+# Author: Fabrizio Montanini
+# Email: fabrizio.montanini@dxc.com
+# Change: role management made compliant with morpheus 6.0.3 changes
 
-from datetime import datetime 
+
 import requests
 import json
 #py2
 #from urllib import urlencode
 #py3
 from urllib.parse import urlencode
+from datetime import datetime
 import urllib3
 urllib3.disable_warnings()
 from morpheuscypher import Cypher
@@ -52,7 +58,7 @@ MORPHEUS_TENANT_ADMIN_ROLES = ['TENANT_ADMIN_TOSC']
 
 # SNow Globals
 SNOW_HEADERS = { "Content-Type": "application/json", "Accept": "application/json" }
-SNOW_HOSTNAME = "regionetoscana.service-now.com"
+SNOW_HOSTNAME = "regionetoscanatest.service-now.com"
 SNOW_USER = 'morpheus'
 SNOW_PWD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/dxcsnowpass"))
 SNOW_OP_STATUS_RETIRED = "6"
@@ -66,7 +72,7 @@ else:
 #Keycloak Globals
 KEYCLOAK_REST_CLIENT_ID = "rest-client"
 KEYCLOAK_REST_CLIENT_SECRET = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/KeycloakRestClientSecret"))
-KEYCLOAK_HOST = "account.cloud.toscana.it/auth"
+KEYCLOAK_HOST = "10.156.160.62:8080/auth"
 
 KEYCLOAK_VERIFY_SSL_CERT = False
 KEYCLOAK_TENANT_ROLES_BRANCH="1. RUOLI_PER_TENANT"
@@ -225,7 +231,7 @@ def retire_snow_tenant_cmp_group_ci(group_name, group_id):
 def get_keycloak_access_token(keycloak_host, keycloak_realm, client_id, client_secret):
 #Get temporary Keycloak API key from a keycloak rest-client
     header = {"Content-Type": "application/x-www-form-urlencoded; charset=utf-8"}
-    url = "https://%s/realms/%s/protocol/openid-connect/token" % (keycloak_host, keycloak_realm)
+    url = "http://%s/realms/%s/protocol/openid-connect/token" % (keycloak_host, keycloak_realm)
     b = {'client_id': client_id, 'client_secret': client_secret, 'grant_type':'client_credentials'}
     body=urlencode(b)
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
@@ -257,7 +263,7 @@ def get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, group_name, acc
                 if result != -1:
                     break
 
-    url = "https://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, start_group_id)
+    url = "http://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, start_group_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     response = requests.get(url, headers=header, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
@@ -298,7 +304,7 @@ def get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, group_name, acc
 def delete_keycloack_group(keycloak_host, keycloak_realm, access_token, group_id):
 #Delete keycloak group identified by id
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
-    url = "https://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, group_id)
+    url = "http://%s/admin/realms/%s/groups/%s" % (keycloak_host, keycloak_realm, group_id)
     response = requests.delete(url, headers=header, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
         print("Error deleting keycloak group '%s': Response code %s: %s" % (group_id, response.status_code, response.text))
