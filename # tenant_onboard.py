@@ -59,7 +59,7 @@ if LEGACY_GROUP_OPTION == "on":
     else:
         MORPHEUS_TENANT_INFRA_GROUPS = LEGACY_GROUPS_LIST.strip().upper()
 else:
-    REUSE_LEGACY = False
+    REUSE_LEGACY = True
     MORPHEUS_TENANT_INFRA_GROUPS = morpheus['customOptions']['new_infra_groups'].strip().upper()
 
 #print("infra groups: \"'%s'\"" % (MORPHEUS_TENANT_INFRA_GROUPS))
@@ -418,7 +418,7 @@ def create_morpheus_saml_provider(morpheus_host, access_token, tenant_id, role_m
     data = response.json()
     #print(data)
     saml_provider_id = data['userSource']['id']
-    print("SAML provider id is: '%s'" %(saml_provider_id ))
+    print(".....SAML provider id is: '%s'" %(saml_provider_id ))
 
     #Set forceAuthn = False for the new SAML provider
     url = "https://%s/api/accounts/%s/user-sources/%s" % (morpheus_host, tenant_id, saml_provider_id)
@@ -437,42 +437,42 @@ def input_sanity_checks(morpheus_host, tenant_name, group_names_csv, group_codes
     # Check group names in INFRAGROUPS are not empty string
     for grp in group_names_csv.split(","):
         if grp == "":
-            print("Input Error: Group Name cannot be empty string")
-            raise Exception("Input Error: Group Name cannot be empty string")
+            print("....Input Error: Group Name cannot be empty string")
+            raise Exception("....Input Error: Group Name cannot be empty string")
 
     # 30/11/2022: Added control to check lenght of tenant name (Max 4 chars)
     # Check tenant name lenght is <= 4 chars
     if len(tenant_name) > 4:
-        print("Error: Tenant name must be Max 4 chars")
-        raise Exception("Error: Tenant name must be Max 4 chars")
+        print("....Error: Tenant name must be Max 4 chars")
+        raise Exception("....Error: Tenant name must be Max 4 chars")
 
     # Check that names do not contain spaces
     if ' ' in tenant_name or tenant_name == "":
-        print("Tenant name '%s' contains spaces or is blank. Not allowed." % (tenant_name))
-        raise Exception("Tenant name '%s' contains spaces or is blank. Not allowed." % (tenant_name))
+        print("....Tenant name '%s' contains spaces or is blank. Not allowed." % (tenant_name))
+        raise Exception("....Tenant name '%s' contains spaces or is blank. Not allowed." % (tenant_name))
 
     for infra_group in group_names_csv.split(','):
         if ' ' in infra_group.strip() or infra_group.strip() == "":
-            print("Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group))
-            raise Exception("Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group))
+            print("....Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group))
+            raise Exception("....Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group))
  
     for infra_group_code in group_codes_csv.split(','):
         if ' ' in infra_group_code.strip() or infra_group_code.strip() == "":
-            print("Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group_code))
-            raise Exception("Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group_code))    
+            print("....Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group_code))
+            raise Exception("....Infra Group name '%s' contains spaces or is blank. Not allowed." % (infra_group_code))    
 
     # 30/11/2022: Added control to check group_code is set for every Resource Group
     # Check INFRA_GROUPS and INFRAGROUP_CODES have the same number of elements
     if len(group_names_csv.split(",")) > len(group_codes_csv.split(",")):
-        print("Error creating groups: each resource group must have a code")
-        raise Exception("Error creating groups: each resource group must have a code")
+        print("....Error creating groups: each resource group must have a code")
+        raise Exception("....Error creating groups: each resource group must have a code")
 
     # 30/11/2022: Added control to check group_code length is max 4 chars
     # Check codes in INFRAGROUP_CODES have max lenght 4 chars
     for code in group_codes_csv.split(","):
         if len(code.strip()) > 3:
-            print("Error, code lenght must be max 3 chars, wrong code: " +code.strip())
-            raise Exception("Error, code lenght must be max 3 chars, wrong code: " +code.strip())
+            print("....Error, code lenght must be max 3 chars, wrong code: " +code.strip())
+            raise Exception("....Error, code lenght must be max 3 chars, wrong code: " +code.strip())
 
     # 02/12/2022: Added control ti check duplicates in input
     # Check if any duplicate entry in input
@@ -482,8 +482,8 @@ def input_sanity_checks(morpheus_host, tenant_name, group_names_csv, group_codes
        for elem in INPUT_LIST:
            SPLIT_LIST.append(elem.strip())
        if len(INPUT_LIST) != len(set(SPLIT_LIST)):
-          print("duplicates entries found in input for groups or group codes")
-          raise Exception("duplicates entries found in input for groups or group codes")
+          print("....Duplicates entries found in input for groups or group codes")
+          raise Exception("....Duplicates entries found in input for groups or group codes")
 
  
 def create_snow_tenant_ci(tenant_name):
@@ -701,41 +701,41 @@ def create_keycloack_groups_for_morpheus_infragroup(keycloak_host, keycloak_real
     print("Creating group hierarchy for tenant '%s'" % (tenant_name))
 
     #create CMP groups
-    print("Creating folder: '%s'" % ("ruoli CMP " + tenant_name))
+    print("....'%s'" % ("ruoli CMP " + tenant_name))
     cmp_base_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "ruoli CMP " + tenant_name, tenant_base_id)
-    print("Creating role  :   '%s'" % ("CMP_" + tenant_name))
+    print("........'%s'" % ("CMP_" + tenant_name))
     child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "CMP_" + tenant_name, cmp_base_id)
-    print("Creating role  :   '%s'" % ("CMP_" + tenant_name + "_ADMIN"))
+    print("........'%s'" % ("CMP_" + tenant_name + "_ADMIN"))
     child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "CMP_" + tenant_name + "_ADMIN", cmp_base_id)
     for resgroup in infra_groups_list.split(','):
         resgroup = resgroup.strip()
-        print("Creating folder:   '%s'" % ("ruoli CMP " + tenant_name + "_" + resgroup))
+        print("........'%s'" % ("ruoli CMP " + tenant_name + "_" + resgroup))
         parent_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "ruoli CMP " + tenant_name + "_" + resgroup, cmp_base_id)
         for role in "_USERCTLG", "_USERSTD":
-            print("Creating role  :      '%s'" % ("CMP_" + tenant_name + "_" + resgroup + role))
+            print("............'%s'" % ("CMP_" + tenant_name + "_" + resgroup + role))
             child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "CMP_" + tenant_name + "_" + resgroup + role, parent_id)
 
     #create NAGIOS groups
-    print("Creating folder: '%s'" % ("ruoli NAGIOS " + tenant_name))
+    print("....'%s'" % ("ruoli NAGIOS " + tenant_name))
     nagios_base_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "ruoli NAGIOS " + tenant_name, tenant_base_id)
-    print("Creating role  :   '%s'" % (NAGIOS_TAG + "_" + tenant_name + "_USER"))
+    print("........'%s'" % (NAGIOS_TAG + "_" + tenant_name + "_USER"))
     child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, NAGIOS_TAG + "_" + tenant_name + "_USER", nagios_base_id)
     for resgroup in infra_groups_list.split(','):
         resgroup = resgroup.strip()
-        print("Creating folder:   '%s'" % ("ruoli NAGIOS " + tenant_name + "_" + resgroup))
+        print("........'%s'" % ("ruoli NAGIOS " + tenant_name + "_" + resgroup))
         parent_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "ruoli NAGIOS " + tenant_name + "_" + resgroup, nagios_base_id)
-        print("Creating role  :      '%s'" % (NAGIOS_TAG + "_" + tenant_name + "_" + resgroup + "_USER"))
+        print("............'%s'" % (NAGIOS_TAG + "_" + tenant_name + "_" + resgroup + "_USER"))
         child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, NAGIOS_TAG + "_" + tenant_name + "_" + resgroup + "_USER", parent_id)
 
     #create SNOW groups
     snow_base_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "ruoli SNOW " + tenant_name, tenant_base_id)
-    print("Creating folder: '%s'" % ("ruoli SNOW " + tenant_name))
+    print("....'%s'" % ("ruoli SNOW " + tenant_name))
     child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "SNOW_" + tenant_name + "_DEC", snow_base_id)
-    print("Creating role  :   '%s'" % ("SNOW_" + tenant_name + "_DEC"))
+    print("........'%s'" % ("SNOW_" + tenant_name + "_DEC"))
     for resgroup in infra_groups_list.split(','):
         resgroup = resgroup.strip()
         parent_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "ruoli SNOW " + tenant_name + "_" + resgroup, snow_base_id)
-        print("Creating folder:   '%s'" % ("ruoli SNOW " + tenant_name + "_" + resgroup))
+        print("........'%s'" % ("ruoli SNOW " + tenant_name + "_" + resgroup))
         legacy_root_id = get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, KEYCLOAK_LEGACY_ROLES_BRANCH, access_token, "")
         reused_legacy_group = False
         for role in "_RESPONSABILE", "_USERSTD":
@@ -746,13 +746,13 @@ def create_keycloack_groups_for_morpheus_infragroup(keycloak_host, keycloak_real
                     reused_legacy_group = True
                     move_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "SNOW_" + resgroup + role, legacy_group_id, parent_id)
                     rename_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "SNOW_" + tenant_name + "_" + resgroup  + role, legacy_group_id)
-                    print("Reusing role   :      '%s'" % ("SNOW_" + resgroup + role))
+                    print("............'%s' (migrated from legacy)" % ("SNOW_" + resgroup + role))
                 else:
                     child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "SNOW_" + tenant_name + "_" + resgroup + role, parent_id)
-                    print("Creating role  :      '%s'" % ("SNOW_" + tenant_name + "_" + resgroup + role))
+                    print("............'%s'" % ("SNOW_" + tenant_name + "_" + resgroup + role))
             else:
                 child_id = create_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, "SNOW_" + tenant_name + "_" + resgroup + role, parent_id)
-                print("Creating role  :      '%s'" % ("SNOW_" + tenant_name + "_" + resgroup + role))
+                print("............'%s'" % ("SNOW_" + tenant_name + "_" + resgroup + role))
         if reused_legacy_group:
             legacy_group_root_id = get_keycloak_group_id_by_name(keycloak_host, keycloak_realm, "ruoli SNOW " + resgroup, access_token, legacy_root_id)
             if legacy_group_root_id != -1:
@@ -796,8 +796,8 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     response = requests.get(url, headers=header, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating keycloak clients list: Response code %s: %s" % (response.status_code, response.text))
-        raise Exception("Error creating keycloak clients list: Response code %s: %s" % (response.status_code, response.text))
+        print(".....Error creating keycloak clients list: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception(".....Error creating keycloak clients list: Response code %s: %s" % (response.status_code, response.text))
     data = response.json()
     for client in data:
         if client["clientId"] == tenant_entity_id:
@@ -817,10 +817,10 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     body = json.dumps(b)
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
-        raise Exception("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        print(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
 
-    print("...created client attribute mapper for Surname")
+    print(".....created client attribute mapper for Surname")
 
     #add client attribute mapper for email
     url = "http://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
@@ -833,10 +833,10 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     body = json.dumps(b)
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
-        raise Exception("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        print(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
 
-    print("...created client attribute mapper for email")
+    print(".....created client attribute mapper for email")
 
     #add client attribute mapper for givenName
     url = "http://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
@@ -849,10 +849,10 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     body = json.dumps(b)
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
-        raise Exception("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        print(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
 
-    print("...created client attribute mapper for givenName")
+    print(".....created client attribute mapper for givenName")
 
     #add client attribute mapper for Group
     url = "http://%s/admin/realms/%s/clients/%s/protocol-mappers/models" % (keycloak_host, keycloak_realm, client_id)
@@ -865,10 +865,10 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     body = json.dumps(b)
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
-        raise Exception("Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        print(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception(".....Error creating keycloak client mappers: Response code %s: %s" % (response.status_code, response.text))
 
-    print("...created client attribute mapper for Group")
+    print(".....created client attribute mapper for Group")
 
     print("Creating keycloak client-role '%s' for client '%s'" % (tenant_name, tenant_entity_id))
 
@@ -880,16 +880,16 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     #print(json.dumps(body, indent=4))
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))
-        raise Exception("Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))    
+        print(".....Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))
+        raise Exception(".....Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))    
 
     #get client-role id created for the new client as tenant_name
     url = "http://%s/admin/realms/%s/clients/%s/roles" % (keycloak_host, keycloak_realm, client_id)
     header = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + access_token}
     response = requests.get(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error getting keycloak client-role id: Response code %s: %s" % (response.status_code, response.text))
-        raise Exception("Error getting keycloak client-role id: Response code %s: %s" % (response.status_code, response.text))    
+        print(".....Error getting keycloak client-role id: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception(".....Error getting keycloak client-role id: Response code %s: %s" % (response.status_code, response.text))    
     data = response.json()
     for clientrole in data:
         if clientrole["name"] == tenant_name:
@@ -915,8 +915,8 @@ def create_keycloak_object_for_tenant(keycloak_host, keycloak_realm, access_toke
     #print(json.dumps(body, indent=4))
     response = requests.post(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))
-        raise Exception("Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))       
+        print(".....Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))
+        raise Exception(".....Error creating keycloak client-role '%s' for '%s': Response code %s: %s" % (tenant_name, tenant_entity_id, response.status_code, response.text))       
 
 
 #---- functions to get morpheus tenant parameters for keycloak integration ----
@@ -927,8 +927,8 @@ def get_morpheus_idm_provider_settings(morpheus_host, access_token, parameter_na
     MORPHEUS_HEADERS["Authorization"] = "Bearer " + access_token
     response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error getting identity provider parameter %s for tenant: %s Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
-        raise Exception("Error getting identity provider parameter %s for tenant: '%s' Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
+        print(".....Error getting identity provider parameter %s for tenant: %s Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
+        raise Exception(".....Error getting identity provider parameter %s for tenant: '%s' Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
  
     data = response.json()
          
@@ -936,8 +936,8 @@ def get_morpheus_idm_provider_settings(morpheus_host, access_token, parameter_na
         if src["name"] == MORPHEUS_IDM_NAME:
             return src["providerSettings"][parameter_name]
  
-    print("Parameter %s not found for Identity Source %s in tenant %s..." % (parameter_name, MORPHEUS_IDM_NAME, tenant_id))
-    raise Exception("Parameter %s not found for Identity Source %s in tenant %s..." % (parameter_name, MORPHEUS_IDM_NAME, tenant_id))
+    print(".....Parameter %s not found for Identity Source %s in tenant %s..." % (parameter_name, MORPHEUS_IDM_NAME, tenant_id))
+    raise Exception(".....Parameter %s not found for Identity Source %s in tenant %s..." % (parameter_name, MORPHEUS_IDM_NAME, tenant_id))
 
 def get_morpheus_idm_provider_id(morpheus_host, access_token, tenant_id ):
 #Get Provider id for Identity connector MORPHEUS_IDM_NAME in tenant_id    
@@ -945,8 +945,8 @@ def get_morpheus_idm_provider_id(morpheus_host, access_token, tenant_id ):
     MORPHEUS_HEADERS["Authorization"] = "Bearer " + access_token
     response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error getting identity provider parameter %s for tenant: %s Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
-        raise Exception("Error getting identity provider parameter %s for tenant: '%s' Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
+        print(".....Error getting identity provider parameter %s for tenant: %s Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
+        raise Exception(".....Error getting identity provider parameter %s for tenant: '%s' Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
  
     data = response.json()
          
@@ -954,12 +954,15 @@ def get_morpheus_idm_provider_id(morpheus_host, access_token, tenant_id ):
         if src["name"] == MORPHEUS_IDM_NAME:
             return src["id"]
  
-    print("Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
-    raise Exception("Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
+    print(".....Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
+    raise Exception(".....Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
  
 ##################
 # MAIN CODE BODY #
 ##################
+
+print("\nOutput Log:")
+print("-----------\n")
 
 # ensure that the current script it running within a sub-tenant
 current_tenant = get_morpheus_current_tenant(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN)
@@ -974,8 +977,11 @@ if skip_morpheus:
     print("Skipping the creation of Morpheus artefacts...")
 else:
 
+    print("Checking input....")
     input_sanity_checks(MORPHEUS_HOST, MORPHEUS_TENANT, MORPHEUS_TENANT_INFRA_GROUPS, MORPHEUS_TENANT_INFRA_GROUPS_CODES)
+    print(".....OK")
 
+    print("\nWorking on Morpheus:\n")
     # Create tenant base role
     print("Creating subtenant '%s' from base role...." % (MORPHEUS_TENANT))
     tenant_base_role_source_id = get_morpheus_role_id_by_name(MORPHEUS_HOST, MORPHEUS_TENANT_BASE_ROLE, MORPHEUS_MASTER_TENANT_TOKEN)
@@ -1018,7 +1024,7 @@ else:
     clear_tenant_groups(MORPHEUS_HOST, tenant_access_token)
     
     # Create the Tenant Admin role and assign to initial admin user
-    print("Create tenant admin role from base role and assigning to tenant admin....")
+    print("Creating tenant admin role from base role and assigning to tenant admin....")
     tenant_admin_role_id = create_morpheus_role(MORPHEUS_HOST, tenant_access_token, MORPHEUS_TENANT + "_ADMIN", admin_role_base_id, "user")
     #set_morpheus_role_groups_default(MORPHEUS_HOST, tenant_access_token, tenant_admin_role_id, "full")
     #assign_morpheus_role_to_user(MORPHEUS_HOST, tenant_access_token, tenant_admin_role_id, initial_tenant_user_id)
@@ -1068,10 +1074,11 @@ else:
 if SNOW_SKIP:
     print("Skipping the creation of ServiceNow Tenant and group CIs.....")
 else:
+    print("\nWorking on ServiceNow:\n")
     # Create tenant record in ServiceNow
     print("Creating ServiceNow Tenant CI.....")
     tenant_sys_id = create_snow_tenant_ci(MORPHEUS_TENANT)
-    print("Created tenant '%s' with id '%s' in ServiceNow" % (MORPHEUS_TENANT, tenant_sys_id))
+    print(".....Created tenant '%s' with id '%s' in ServiceNow" % (MORPHEUS_TENANT, tenant_sys_id))
 
     # #Loop through infrastructure groups to add to ServiceNow
 
@@ -1087,23 +1094,25 @@ else:
         group_code = MORPHEUS_TENANT_INFRA_GROUPS_CODES.split(",")[group_index].strip()
         group_name=group.strip()
         group_sys_id = create_snow_cmp_group_record(tenant_sys_id, group_name, group_code)
-        print("Created group '%s' with code '%s' and id '%s' in ServiceNow" % (group_name, group_code, group_sys_id))
+        print(".....Created group '%s' with code '%s' and id '%s' in ServiceNow" % (group_name, group_code, group_sys_id))
 
 skip_keycloak = False
-if skip_keycloak:
-    print("Skipping the creation of Keycloak artefacts...")
-else:
 
+if skip_keycloak:
+    print("\nSkipping the creation of Keycloak artefacts...\n")
+else:
+    print("\nWorking on Keycloak:\n")
     # Generate keycloak access token
     print("Getting keycloak login token....")
     keycloak_access_token = get_keycloak_access_token(KEYCLOAK_HOST, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET)
     #print("keycloak access token: '%s'" % (keycloak_access_token))
     
     #print(tenant_id)
+    print("Getting Morpheus SAML Identity Provider's parameters ")
     entityId_value = get_morpheus_idm_provider_settings(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, "entityId", tenant_id)
-    print("Parameter: %s Value: %s" % ("entityId", entityId_value))
+    print(".....Parameter: %s Value: %s" % ("entityId", entityId_value))
     acsUrl_value = get_morpheus_idm_provider_settings(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, "acsUrl", tenant_id)
-    print("Parameter: %s Value: %s" % ("acsUrl", acsUrl_value))
+    print(".....Parameter: %s Value: %s" % ("acsUrl", acsUrl_value))
     IdentityProviderID = get_morpheus_idm_provider_id(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_id)
 
     create_keycloak_object_for_tenant(KEYCLOAK_HOST, KEYCLOAK_REALM, keycloak_access_token, MORPHEUS_TENANT, entityId_value, acsUrl_value, MORPHEUS_TENANT_INFRA_GROUPS)
