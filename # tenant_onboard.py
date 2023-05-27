@@ -15,6 +15,12 @@
 # Author: Fabrizio Montanini
 # Email: fabrizio.montanini@dxc.com
 # Change: morpheus-keycloak integration
+#
+# Date: 18 May 2023
+# Author: Fabrizio Montanini
+# Email: fabrizio.montanini@dxc.com
+# Change: role management made compliant with morpheus 6.0.3 changes
+
 
 import requests
 import json
