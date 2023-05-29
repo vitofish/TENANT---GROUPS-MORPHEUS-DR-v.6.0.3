@@ -682,8 +682,8 @@ def rename_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, new_g
     body = json.dumps(b)    
     response = requests.put(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error renaming keycloak group '%s': Response code %s: %s" % (group_name, response.status_code, response.text))
-        raise Exception("Error renaming keycloak group '%s': Response code %s: %s" % (group_name, response.status_code, response.text))
+        print("Error renaming keycloak group '%s': Response code %s: %s" % (new_group_name, response.status_code, response.text))
+        raise Exception("Error renaming keycloak group '%s': Response code %s: %s" % (new_group_name, response.status_code, response.text))
 
 
 def create_keycloack_groups_for_morpheus_infragroup(keycloak_host, keycloak_realm, access_token, tenant_name, infra_groups_list):
@@ -951,8 +951,8 @@ def get_morpheus_idm_provider_id(morpheus_host, access_token, tenant_id ):
     MORPHEUS_HEADERS["Authorization"] = "Bearer " + access_token
     response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
     if not response.ok:
-        print(".....Error getting identity provider parameter %s for tenant: %s Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
-        raise Exception(".....Error getting identity provider parameter %s for tenant: '%s' Response code %s: %s" % (parameter_name, tenant_id, response.status_code, response.text))
+        print(".....Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
+        raise Exception(".....Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
  
     data = response.json()
          

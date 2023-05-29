@@ -485,8 +485,8 @@ def rename_keycloack_subgroup(keycloak_host, keycloak_realm, access_token, new_g
     body = json.dumps(b)    
     response = requests.put(url, headers=header, data=body, verify=KEYCLOAK_VERIFY_SSL_CERT)
     if not response.ok:
-        print("Error renaming keycloak group '%s': Response code %s: %s" % (group_name, response.status_code, response.text))
-        raise Exception("Error renaming keycloak group '%s': Response code %s: %s" % (group_name, response.status_code, response.text))
+        print("Error renaming keycloak group '%s': Response code %s: %s" % (new_group_name, response.status_code, response.text))
+        raise Exception("Error renaming keycloak group '%s': Response code %s: %s" % (new_group_name, response.status_code, response.text))
 
 
 def create_keycloack_groups_for_morpheus_infragroup(keycloak_host, keycloak_realm, access_token, tenant_name, infra_groups_list):
