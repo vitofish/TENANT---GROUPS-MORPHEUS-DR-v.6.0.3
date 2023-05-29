@@ -402,8 +402,8 @@ else:
 
         base_folder_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, KEYCLOAK_TENANT_ROLES_BRANCH, keycloak_access_token, "", 1)
         if base_folder_id == -1:
-            print("Error looking for Keycloak tenant root folder: '%s' not found! check IDM groups configuration: Response code %s: %s" % (KEYCLOAK_TENANT_ROLES_BRANCH, response.status_code, response.text))
-            raise Exception("Error looking for Keycloak tenant root folder: '%s' not found! check IDM groups configuration: Response code %s: %s" % (KEYCLOAK_TENANT_ROLES_BRANCH, response.status_code, response.text))
+            print("Error looking for Keycloak tenant root folder: '%s' not found! check IDM groups configuration" % (KEYCLOAK_TENANT_ROLES_BRANCH))
+            quit()
         tenant_folder_name = "ruoli tenant " + MORPHEUS_TENANT
         tenant_folder_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, tenant_folder_name, keycloak_access_token, base_folder_id, 1)
         if tenant_folder_id == -1:
