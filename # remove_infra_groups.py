@@ -158,8 +158,8 @@ def get_snow_tenant_ci_sys_id(snow_host, tenant_name):
     params = { "sysparm_query": "name=" + tenant_name + "^operational_status!=" + SNOW_OP_STATUS_RETIRED }
     response = requests.get(url, auth=(SNOW_USER, SNOW_PWD), headers=SNOW_HEADERS, params=params)
     if not response.ok:
-        print("Error looking up tenant CI '%s' in ServciceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
-        #raise Exception("Error looking up tenant CI '%s' in ServciceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
+        print("Error looking up tenant CI '%s' in ServiceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
+        #raise Exception("Error looking up tenant CI '%s' in ServiceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
         return []
 
     data = response.json()
@@ -169,7 +169,7 @@ def get_snow_tenant_ci_sys_id(snow_host, tenant_name):
         return []
 
     if len(data["result"]) > 1:
-        print("Warning: Duplicates of Operational Tenant CI '%s' not found in ServciceNow. Please cleaning up all of them...." % (tenant_name))
+        print("Warning: Duplicates of Operational Tenant CI '%s' not found in ServiceNow. Please cleaning up all of them...." % (tenant_name))
 
     tenant_sys_ids = [x['sys_id'] for x in data["result"]] 
 
@@ -189,8 +189,8 @@ def get_active_snow_tenant_groups_sys_ids(snow_host, tenant_id):
 
     data = response.json()
     if len(data["result"]) == 0:
-        print("No groups found for Tenant '%s' in ServciceNow." % (tenant_id))
-        #raise Exception("No groups found for Tenant '%s' in ServciceNow." % (tenant_id))
+        print("No groups found for Tenant '%s' in ServiceNow." % (tenant_id))
+        #raise Exception("No groups found for Tenant '%s' in ServiceNow." % (tenant_id))
         return []
 
     result = []
@@ -207,8 +207,8 @@ def retire_snow_tenant_ci(tenant_name, tenant_id):
     url = 'https://%s/api/now/table/u_cmdb_ci_tenant/%s' % (SNOW_HOSTNAME, tenant_id)
     response = requests.put(url, auth=(SNOW_USER, SNOW_PWD), headers=SNOW_HEADERS ,data=body)
     if not response.ok:
-        print("Error updating tenant CI for tenant '%s' in ServciceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
-        #raise Exception("Error updating tenant CI for tenant '%s' in ServciceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
+        print("Error updating tenant CI for tenant '%s' in ServiceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
+        #raise Exception("Error updating tenant CI for tenant '%s' in ServiceNow: Response code %s: %s" % (tenant_name, response.status_code, response.text))
 
     return tenant_id
 
@@ -221,8 +221,8 @@ def retire_snow_tenant_cmp_group_ci(group_name, group_id):
     url = 'https://%s/api/now/table/u_cmdb_ci_cmpresourcegroup/%s' % (SNOW_HOSTNAME, group_id)
     response = requests.put(url, auth=(SNOW_USER, SNOW_PWD), headers=SNOW_HEADERS ,data=body)
     if not response.ok:
-        print("Error updating tenant CMP Group '%s' in ServciceNow: Response code %s: %s" % (group_name, response.status_code, response.text))
-        #raise Exception("Error updating tenant CMP Group '%s' in ServciceNow: Response code %s: %s" % (group_name, response.status_code, response.text))
+        print("Error updating tenant CMP Group '%s' in ServiceNow: Response code %s: %s" % (group_name, response.status_code, response.text))
+        #raise Exception("Error updating tenant CMP Group '%s' in ServiceNow: Response code %s: %s" % (group_name, response.status_code, response.text))
 
     return group_id
    
