@@ -16,15 +16,19 @@
 # Author: Fabrizio Montanini
 # Email: fabrizio.montanini@dxc.com
 # Change: role management made compliant with morpheus 6.0.3 changes
+#
+# Date: 10 Jul 2023
+# Author: Fabrizio Montanini
+# Email: fabrizio.montanini@dxc.com
+# Change: unassign infragroup roles before removal
 
-
+from datetime import datetime
 import requests
 import json
 #py2
 #from urllib import urlencode
 #py3
 from urllib.parse import urlencode
-from datetime import datetime
 import urllib3
 urllib3.disable_warnings()
 from morpheuscypher import Cypher
@@ -328,6 +332,113 @@ def check_user_authorization(morpheus_host, access_token, role_list):
     return authorized
 
 
+def remove_morpheus_role_members(morpheus_host, access_token, tenant_id, role_id):
+# Remove the role to be deleted from all usere in the tenant
+
+    print("....Removing role '%s' from all users of tenant '%s'" % (role_id, tenant_id))
+
+    user_sources_list = []
+    users_list = []
+
+    # get list of active user-sources for the given tenant_id
+    url = "https://%s/api/accounts/%s/user-sources/?max=-1" % (morpheus_host, tenant_id)
+    MORPHEUS_HEADERS["Authorization"] = "Bearer " + access_token
+    response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
+    if not response.ok:
+        print("Error getting user-sources for tenant id '%s': Response code %s: %s" % (tenant_id, response.status_code, response.text))
+        #raise Exception("Error getting  user-sources for tenant id '%s': Response code %s: %s" % (role_name, response.status_code, response.text))
+ 
+    data = response.json()
+    #print(data)
+         
+    for user_source in data["userSources"]:
+        # if user_source["active"] == True:
+        #     user_sources_list.append(user_source["id"])
+        user_sources_list.append(user_source["id"])
+    #print("....User-sources list: '%s'" % (user_sources_list))
+
+    # Temporarily set manualRoleAssignment = on for the active identity sources
+    for identity_provider_id in user_sources_list:
+        print("........Temporarily setting \"Manual Role Assignment\" to ON for identity source id %s" % (identity_provider_id))
+        url = "https://%s/api/user-sources/%s" % (morpheus_host, identity_provider_id)
+        MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
+        b = {"userSource": {"manualRoleAssignment": "on"}}
+        body = json.dumps(b)
+        response = requests.put(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
+        if not response.ok:
+            print("........Error enabling manualRoleAssignment in SAML provider '%s' on tenant '%s': Response code %s: %s" % (identity_provider_id, tenant_id, response.status_code, response.text))
+            raise Exception("Error enabling manualRoleAssignment in SAML provider '%s' on tenant '%s': Response code %s: %s" % (identity_provider_id, tenant_id, response.status_code, response.text))
+
+    # get list of all users in the given tenant_id
+    url = "https://%s/api/accounts/%s/users/?max=-1" % (morpheus_host, tenant_id)
+    MORPHEUS_HEADERS["Authorization"] = "Bearer " + access_token
+    response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
+    if not response.ok:
+        print("........Error getting user list for tenant id '%s': Response code %s: %s" % (tenant_id, response.status_code, response.text))
+        #raise Exception("Error getting user list for tenant id '%s': Response code %s: %s" % (role_name, response.status_code, response.text))
+ 
+    data = response.json()
+    #print(data)
+         
+    for user in data["users"]:
+        users_list.append(user["id"])
+    print("........Users list: '%s'" % (users_list))
+
+    # remove role_id from all users
+    for user_id in users_list:
+        # get assigned roles for the selected user
+        url = "https://%s/api/users/%s" % (morpheus_host, user_id)
+        MORPHEUS_HEADERS["Authorization"] = "Bearer " + access_token
+        response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
+        if not response.ok:
+            print("........Error getting user roles for user id '%s': Response code %s: %s" % (user_id, response.status_code, response.text))
+            #raise Exception("Error getting user roles for user id '%s': Response code %s: %s" % (user_id, response.status_code, response.text))
+    
+        data = response.json()
+        #print(data)
+
+        user_roles_list = []
+        role_found  = False
+        for role in data["user"]["roles"]:
+            if role["id"] != role_id:
+                user_roles_list.append(role["id"])
+            else:
+                role_found = True
+
+        if role_found:
+            
+            if len(user_roles_list) == 0: # empty role list are not accepted: deleting user
+                print("............Deleting user: '%s' with no role left" % (user_id))
+                url = "https://%s/api/users/%s" % (morpheus_host, user_id)
+                MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
+                response = requests.delete(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
+                if not response.ok:
+                    print("............Error deleting user id '%s': Response code %s: %s" % (user_id, response.status_code, response.text))
+                    #raise Exception("Error deleting user id '%s': Response code %s: %s" % (user_id, response.status_code, response.text))
+            else:
+                print("............Setting user roles for user: '%s' to: '%s'" % (user_id, user_roles_list))
+                url = "https://%s/api/users/%s" % (morpheus_host, user_id)
+                MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
+                b = {"user": {"roles": [{"id": item} for item in user_roles_list]}}
+                body = json.dumps(b)
+                response = requests.put(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
+                if not response.ok:
+                    print("............Error setting roles for user id '%s': Response code %s: %s" % (user_id, response.status_code, response.text))
+                    #raise Exception("Error setting roles for user id '%s': Response code %s: %s" % (user_id, response.status_code, response.text))
+
+    # Re-set manualRoleAssignment = off for the active identity sources
+    for identity_provider_id in user_sources_list:
+        print("........Restoring \"Manual Role Assignment\" setting to OFF for identity source id %s" % (identity_provider_id))
+        url = "https://%s/api/user-sources/%s" % (morpheus_host, identity_provider_id)
+        MORPHEUS_HEADERS["Authorization"] = "Bearer " + (access_token)
+        b = {"userSource": {"manualRoleAssignment": "off"}}
+        body = json.dumps(b)
+        response = requests.put(url, headers=MORPHEUS_HEADERS, data=body, verify=MORPHEUS_VERIFY_SSL_CERT)
+        if not response.ok:
+            print("....Error disabling manualRoleAssignment in SAML provider '%s' on tenant '%s': Response code %s: %s" % (identity_provider_id, tenant_id, response.status_code, response.text))
+            raise Exception("Error disabling manualRoleAssignment in SAML provider '%s' on tenant '%s': Response code %s: %s" % (identity_provider_id, tenant_id, response.status_code, response.text))
+
+
 #############
 # Main Code #
 #############
@@ -351,27 +462,29 @@ else:
         print("Error: You must be Tenant Admin to run this script")
         raise Exception("Error: You must be Tenant Admin to run this script")
 
+    print("\nWorking on ServiceNow and Morpheus:")
     ### Morpheus ###
     for group in MORPHEUS_GROUPS.split(","):
         group_name = group.strip()
     
         ### ServiceNow ###
         if SNOW_SKIP:
-            print("Skipping the retirement of ServiceNow Tenant and group CIs.....")
+            print("\nSkipping the retirement of ServiceNow Tenant and group CIs.....")
         else:
             # Get tenant IDs - could potentially have duplicates
             tenant_ci_sys_ids = get_snow_tenant_ci_sys_id(SNOW_HOSTNAME, MORPHEUS_TENANT)
             # Get CMP Groups for each Tenant sys_id
             cmp_groups_to_be_deleted = []
             for tenant_id in tenant_ci_sys_ids:
-                print("Found Tenant: " + tenant_id)
+                print("\nFound ServiceNow Tenant: " + tenant_id)
                 tenant_groups = get_active_snow_tenant_groups_sys_ids(SNOW_HOSTNAME, tenant_id)
                 for group in tenant_groups:
                     if group["name"] == group_name:
-                        print("....Found Group: " + str(group))
+                        print("....Found ServiceNow Group: " + str(group))
                         cmp_groups_to_be_deleted.append(group)
             # retire Tenant Groups by adding _deleted to name and changing operational status to retired
             for group in cmp_groups_to_be_deleted:
+                print("....Retiring ServiceNow Group: " + str(group))
                 retire_snow_tenant_cmp_group_ci(group["name"], group["sys_id"])
         
         ### Morpheus ###
@@ -381,18 +494,24 @@ else:
         catalog_role_name = "%s_%s_USERCTLG" % (MORPHEUS_TENANT, group_name.upper())
         standard_role_id = get_morpheus_role_id_by_name(MORPHEUS_HOST, standard_role_name, MORPHEUS_TOKEN)
         catalog_role_id = get_morpheus_role_id_by_name(MORPHEUS_HOST, catalog_role_name, MORPHEUS_TOKEN)
+
         # delete group
-        print("Deleting Group with ID %s" % (group_id))
+        print("Deleting Morpheus Group %s with ID %s" % (group_name.upper(), group_id))
         delete_morpheus_object(MORPHEUS_HOST, "/api/groups/" + str(group_id), MORPHEUS_TOKEN)
+
         # delete standard role
-        print("Deleting Role %s with ID %s" % (standard_role_name, standard_role_id))
+        print("Deleting Morpheus Role %s with ID %s" % (standard_role_name, standard_role_id))
+        remove_morpheus_role_members(MORPHEUS_HOST, MORPHEUS_TOKEN, current_tenant["tenant_id"], standard_role_id)
         delete_morpheus_object(MORPHEUS_HOST, "/api/roles/" + str(standard_role_id), MORPHEUS_TOKEN)
+
         # delete catalog role
-        print("Deleting Role %s with ID %s" % (catalog_role_name, catalog_role_id))
+        print("Deleting Morpheus Role %s with ID %s" % (catalog_role_name, catalog_role_id))
+        remove_morpheus_role_members(MORPHEUS_HOST, MORPHEUS_TOKEN, current_tenant["tenant_id"], catalog_role_id)
         delete_morpheus_object(MORPHEUS_HOST, "/api/roles/" + str(catalog_role_id), MORPHEUS_TOKEN)
 
 
     ### Keycloak ###
+    print("\nWorking on Keycloak:\n")
     if DELETE_KEYCLOAK_GROUPS == "on":
         # Generate keycloak access token
         print("Getting keycloak login token....")
@@ -402,18 +521,19 @@ else:
 
         base_folder_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, KEYCLOAK_TENANT_ROLES_BRANCH, keycloak_access_token, "", 1)
         if base_folder_id == -1:
-            print("Error looking for Keycloak tenant root folder: '%s' not found! check IDM groups configuration" % (KEYCLOAK_TENANT_ROLES_BRANCH))
+            print("....Error looking for Keycloak tenant root folder: '%s' not found! check IDM groups configuration" % (KEYCLOAK_TENANT_ROLES_BRANCH))
+            #raise Exception("Error looking for Keycloak tenant root folder: '%s' not found! check IDM groups configuration" % (KEYCLOAK_TENANT_ROLES_BRANCH))
             quit()
         tenant_folder_name = "ruoli tenant " + MORPHEUS_TENANT
         tenant_folder_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, tenant_folder_name, keycloak_access_token, base_folder_id, 1)
         if tenant_folder_id == -1:
-            print("Keycloak folder '%s' not found: skipping removal of IDM groups. Please check manually" % (tenant_folder_name))
+            print("....Keycloak folder '%s' not found: skipping removal of IDM groups. Please check manually" % (tenant_folder_name))
         else:
             for service_name in ['CMP','NAGIOS','SNOW']:
                 tenant_service_folder_name = "ruoli " + service_name + " " + MORPHEUS_TENANT
                 tenant_service_folder_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, tenant_service_folder_name, keycloak_access_token, tenant_folder_id, 1)
                 if tenant_service_folder_id == -1:
-                    print("Keycloak Folder '%s' not found: skipping" % (tenant_service_folder_name))
+                    print("....Keycloak Folder '%s' not found: skipping" % (tenant_service_folder_name))
                     next
 
                 for group in MORPHEUS_GROUPS.split(","):
@@ -421,10 +541,10 @@ else:
                     tenant_service_group_folder_name = "ruoli " + service_name + " " + MORPHEUS_TENANT + "_" + group_name
                     tenant_service_group_folder_id = get_keycloak_group_id_by_name(KEYCLOAK_HOST, KEYCLOAK_REALM, tenant_service_group_folder_name, keycloak_access_token, tenant_service_folder_id, 1)
                     if tenant_service_group_folder_id == -1:
-                        print("Keycloak Folder '%s' not found: skipping" % (tenant_service_group_folder_name))
+                        print("....Keycloak Folder '%s' not found: skipping" % (tenant_service_group_folder_name))
                         next
                     else:
-                        print("Deleting Keycloak group '%s' with id: '%s'" % (tenant_service_group_folder_name, tenant_service_group_folder_id))
+                        print("....Deleting Keycloak group '%s' with id: '%s'" % (tenant_service_group_folder_name, tenant_service_group_folder_id))
                         delete_keycloack_group(KEYCLOAK_HOST, KEYCLOAK_REALM, keycloak_access_token, tenant_service_group_folder_id)
     else:
         print("Skipping Keycloak Groups removal as requested")

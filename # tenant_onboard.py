@@ -20,7 +20,17 @@
 # Author: Fabrizio Montanini
 # Email: fabrizio.montanini@dxc.com
 # Change: role management made compliant with morpheus 6.0.3 changes
-
+#
+# Date: 21 Jun 2023
+# Author: Fabrizio Montanini
+# Email: fabrizio.montanini@dxc.com
+# Change: morpheus-SPC Portal integration
+# Change: check on user privileges
+#
+# Date: 31 Jul 2023
+# Author: Fabrizio Montanini
+# Email: fabrizio.montanini@dxc.com
+# Change: added propagation of secret/morpheus-user for SST tenants
 
 import requests
 import json
@@ -33,6 +43,7 @@ from urllib.parse import urlencode
 import urllib3
 urllib3.disable_warnings()
 from morpheuscypher import Cypher
+import psycopg2
 
  
 # pre-Script setup:
@@ -43,6 +54,7 @@ MORPHEUS_TENANT_DEFAULT_ROLE = "USER_STD_TOSC"
 MORPHEUS_TENANT_BASE_ROLE = "TENANT_BASE_ROLE_TOSC"
 MORPHEUS_SAML_PUB_KEY = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/dxcsamlpubkey"))
 SVC_MORPHEUS_VMWARE_SECRET = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/SVC_Morpheus_VMWARE"))
+SST_MORPHEUS_USER_SECRET = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/morpheus-user"))
 
 KEYCLOAK_CLIENT_ID = "rest-client"
 KEYCLOAK_CLIENT_SECRET = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/KeycloakRestClientSecret"))
@@ -84,6 +96,7 @@ NAGIOS_TAG = NAGIOS_TAG_DICT.get(SUB_SYSTEM.upper(), 'NAGIOS')
 MORPHEUS_TENANT_ADMIN_PASSWORD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/defaultpwd"))
 MORPHEUS_TENANT_ADMIN_EMAIL = "tenantadmin@dxc.it"
 MORPHEUS_TENANT_ADMIN_LASTNAME = "Admin"
+AUTHORIZED_ROLES = ['TENANT_ADMIN_TOSC','System Admin']
 
 MORPHEUS_CLUSTER_USER_PASSWORD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/clusteruserpwd"))
 MORPHEUS_CLUSTER_USER_ROLE_SRC = "TENANT_ADMIN_TOSC"
@@ -91,7 +104,7 @@ MORPHEUS_CLUSTER_USER_EMAIL = "ClusterUser@morpheusdata.com"
 MORPHEUS_CLUSTER_USER_USERNAME = "ClusterUser"
 MORPHEUS_CLUSTER_USER_LASTNAME = "User"
 MORPHEUS_CLUSTER_USER_FIRSTNAME = "Cluster"
-
+ 
 SAML_REDIRECT_URL = "https://" + KEYCLOAK_HOST + "/realms/Toscana/protocol/saml"
 SAML_LOGOUT_URL = "https://" + KEYCLOAK_HOST + "/realms/Toscana/protocol/saml"
 SAML_INCLUDE_REQUEST_PARAM = False
@@ -122,11 +135,18 @@ KEYCLOAK_TENANT_ROLES_BRANCH="1. RUOLI_PER_TENANT"
 KEYCLOAK_REALM = "Toscana"
 KEYCLOAK_LOGOUT_REDIRECT_URL = "https://www.cloud.toscana.it/sct/logout/"
 
+# SPC Portal db Globals
+PG_USER = "pf_toscana_user"
+PG_PASSWORD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/portal_db_password"))
+PG_HOST = "10.156.100.16"
+PG_PORT = 15432
+PG_DATABASE = "pf_toscana"
+
 #############
 # Functions #
 #############
 
-
+# Get current tenant datails
 def get_morpheus_current_tenant(morpheus_host, access_token):
  
     url = "https://%s/api/whoami" % (morpheus_host)
@@ -139,6 +159,26 @@ def get_morpheus_current_tenant(morpheus_host, access_token):
     data = response.json()
     #print(json.dumps(data, indent=4))
     return { "tenant_name": data["user"]["account"]["name"], "tenant_id": data["user"]["account"]["id"] }
+
+
+# Check if current user has administrator roles
+def get_current_user(morpheus_host, access_token, role_list):
+
+    url = "https://%s/api/whoami" % (morpheus_host)
+    response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
+    if not response.ok:
+        print("Error getting roles for current user: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception("Error getting roles for current user: Response code %s: %s" % (response.status_code, response.text))
+
+    data = response.json()
+    
+    authorized = False    
+    for role in data["user"]["roles"]:
+        if role["authority"] in role_list:
+            authorized = True
+            break
+
+    return { "name": data["user"]["displayName"], "email": data["user"]["email"], "role": role["authority"], "authorized": authorized }
 
 
 def get_morpheus_clouds_list(morpheus_host, access_token):
@@ -962,7 +1002,69 @@ def get_morpheus_idm_provider_id(morpheus_host, access_token, tenant_id ):
  
     print(".....Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
     raise Exception(".....Error getting Identity Provider ID for Identity Source %s in tenant %s..." % (MORPHEUS_IDM_NAME, tenant_id))
- 
+
+
+#---- functions to set SCT Portal parameter for morpheus tenant SSO ----
+
+def insert_sct_portal_property(property_name, property_value):
+# Insert SCT Portal redirect property to enable SSO for the new tenant
+# Best effort - caught failures will not cause exceptions
+    try:
+        connection = psycopg2.connect(user=PG_USER,
+                                    password=PG_PASSWORD,
+                                    host=PG_HOST,
+                                    port=PG_PORT,
+                                    database=PG_DATABASE)
+        cursor = connection.cursor()
+
+    except (Exception, psycopg2.Error) as error:
+        print("Failed to connect to SCT Portal database for property insertion")
+        #raise Exception("Failed to connect to SCT Portal database for property insertion", error)        
+    
+    else:
+        print("Clearing existing configurations for %s" % property_name)
+        try:
+            sql_delete_query = """DELETE FROM DXC_PF_TOSCANA_SCT_PROPERTY WHERE nome = %s"""
+            cursor.execute(sql_delete_query, (property_name,))
+
+            connection.commit()
+            count = cursor.rowcount
+            if count > 0:
+                print("....%s Record deleted successfully from DXC_PF_TOSCANA_SCT_PROPERTY table with property_name=%s" % (count, property_name))
+            else:
+                print("....No duplicate record found") 
+
+        except (Exception, psycopg2.Error) as error:
+            print("....Failed to delete record from DXC_PF_TOSCANA_SCT_PROPERTY table")
+            #raise Exception("Failed to delete record from DXC_PF_TOSCANA_SCT_PROPERTY table", error)
+
+        print("Adding new SCT Portal configuration for %s" % property_name)
+        try:
+            sql_insert_query = """ INSERT INTO DXC_PF_TOSCANA_SCT_PROPERTY (nome, valore) VALUES (%s,%s)"""
+            record_to_insert = (property_name, property_value)
+            cursor.execute(sql_insert_query, record_to_insert)
+
+            connection.commit()
+            count = cursor.rowcount
+            print("....%s Record inserted successfully into DXC_PF_TOSCANA_SCT_PROPERTY table" % (count))
+            print("........property_name: %s" % (property_name))
+            print("........property_value: %s" % (property_value))
+
+        except (Exception, psycopg2.Error) as error:
+            print("....Failed to insert record into DXC_PF_TOSCANA_SCT_PROPERTY table")
+            #raise Exception("Failed to insert record into DXC_PF_TOSCANA_SCT_PROPERTY table", error)
+            print("    To manually enable SSO for the new tenant:")
+            print("      - Login to https://www.cloud.toscana.it/portal/ as admin user")
+            print("      - Set %s = %s in \'Configuration Properties SCT\' section" % (property_name, property_value))
+
+
+        finally:
+            # closing database connection.
+            if connection:
+                cursor.close()
+                connection.close()
+                print("....PostgreSQL connection is closed")
+
 ##################
 # MAIN CODE BODY #
 ##################
@@ -976,11 +1078,34 @@ if current_tenant["tenant_id"] != 1:
     print("Error: This script MUST be run within the Master Tenant!")
     raise Exception("Error: This script MUST be run within the Master Tenant!")
 
+# Check if user is authorized to run this script
+requestor = get_current_user(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, AUTHORIZED_ROLES)
+if requestor["authorized"] == False:
+    print("Error: You must have Admin role to run this script")
+    raise Exception("Error: You must have System Admin role to run this script")
+
+
+print("Your Data:")
+print("   name:  '%s'" % (requestor["name"]))
+print("   email: '%s'" % (requestor["email"]))
+print("   role:  '%s'" % (requestor["role"]))
+
+print("Your Input:")
+print("   Tenant Name: '%s'" % (MORPHEUS_TENANT))
+print("   Description: '%s'" % (MORPHEUS_TENANT_DESCRIPTION))
+print("   Infra Groups: '%s'" % (MORPHEUS_TENANT_INFRA_GROUPS))
+print("   Infra Groups: '%s'" % (MORPHEUS_TENANT_INFRA_GROUPS_CODES))
+print("   Core Company: '%s'" % (CORE_COMPANY))
+print("   Infra Groups: '%s'" % (SUB_SYSTEM))
+
+print("\nOutput Log:")
+print("-----------\n")
+
 
 skip_morpheus = False
 
 if skip_morpheus:
-    print("Skipping the creation of Morpheus artefacts...")
+    print("Skipping the creation of Morpheus artifacts...")
 else:
 
     print("Checking input....")
@@ -994,7 +1119,7 @@ else:
     tenant_base_role_id = create_morpheus_role(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, MORPHEUS_TENANT + "_Base_Role", tenant_base_role_source_id, "account")
  
     # Update tenant base role by sub-system suffix
-    set_morpheus_role_clouds_default(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_base_role_id, "read")
+    set_morpheus_role_clouds_default(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_base_role_id, "none")
     clouds_list = get_morpheus_clouds_list(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN)
     set_morpheus_tenant_role_cloud_access_by_suffix(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, tenant_base_role_id, SUB_SYSTEM, clouds_list)
 
@@ -1016,6 +1141,8 @@ else:
     create_morpheus_cypher_secret(MORPHEUS_HOST, tenant_access_token, "dxcsnowpass", SNOW_PWD)
     create_morpheus_cypher_secret(MORPHEUS_HOST, tenant_access_token, "KeycloakRestClientSecret", KEYCLOAK_CLIENT_SECRET)
     create_morpheus_cypher_secret(MORPHEUS_HOST, tenant_access_token, "SVC_Morpheus_VMWARE", SVC_MORPHEUS_VMWARE_SECRET)
+    if (SUB_SYSTEM.upper() == "SST"):
+        create_morpheus_cypher_secret(MORPHEUS_HOST, tenant_access_token, "morpheus-user", SST_MORPHEUS_USER_SECRET)
 
     # lookup source role ids in subtenant for new role creation
     catalog_role_base_id = get_morpheus_role_id_by_name(MORPHEUS_HOST, MORPHEUS_TENANT_CTLG_ROLE_SRC, tenant_access_token)
@@ -1105,14 +1232,14 @@ else:
 skip_keycloak = False
 
 if skip_keycloak:
-    print("\nSkipping the creation of Keycloak artefacts...\n")
+    print("\nSkipping the creation of Keycloak artifacts...\n")
 else:
     print("\nWorking on Keycloak:\n")
     # Generate keycloak access token
     print("Getting keycloak login token....")
     keycloak_access_token = get_keycloak_access_token(KEYCLOAK_HOST, KEYCLOAK_REALM, KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET)
     #print("keycloak access token: '%s'" % (keycloak_access_token))
-    
+
     #print(tenant_id)
     print("Getting Morpheus SAML Identity Provider's parameters ")
     entityId_value = get_morpheus_idm_provider_settings(MORPHEUS_HOST, MORPHEUS_MASTER_TENANT_TOKEN, "entityId", tenant_id)
@@ -1123,9 +1250,12 @@ else:
 
     create_keycloak_object_for_tenant(KEYCLOAK_HOST, KEYCLOAK_REALM, keycloak_access_token, MORPHEUS_TENANT, entityId_value, acsUrl_value, MORPHEUS_TENANT_INFRA_GROUPS)
 
-print("\nDone.\n")
+skip_portal = False
 
-print("Next Steps:\n")
-print("To enable SSO to new tenant:")
-#print("  - Ensure that  \'Force Authn\' is unset in \'Advanced Options\' of Identity Source \'%s\' of tenant %s" % (MORPHEUS_IDM_NAME, MORPHEUS_TENANT))
-print("  - Set morpheus.tenant.redirect.%s=%s in \'Configuration Properties SCT\' section of https://www.cloud.toscana.it/portal/" % (MORPHEUS_TENANT, IdentityProviderID))
+if skip_portal:
+    print("\nSkipping the configuration of SCT Portal...\n")
+else:
+    print("\nWorking on SCT Portal:\n")
+    insert_sct_portal_property("morpheus.tenant.redirect." + MORPHEUS_TENANT, IdentityProviderID)
+
+print("\nDone.\n")

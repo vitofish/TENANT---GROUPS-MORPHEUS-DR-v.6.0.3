@@ -25,7 +25,12 @@
 # Author: Fabrizio Montanini
 # Email: fabrizio.montanini@dxc.com
 # Change: role management made compliant with morpheus 6.0.3 changes
-
+#
+# Date: 21 Jun 2023
+# Author: Fabrizio Montanini
+# Email: fabrizio.montanini@dxc.com
+# Change: morpheus-SPC Portal integration
+# Change: check on user privileges
 
 from datetime import datetime  
 import requests
@@ -37,6 +42,7 @@ from urllib.parse import urlencode
 import urllib3
 urllib3.disable_warnings()
 from morpheuscypher import Cypher
+import psycopg2
 
 
 # Misc
@@ -55,6 +61,7 @@ MORPHEUS_TOKEN = morpheus['morpheus']['apiAccessToken']
 MORPHEUS_HEADERS = {"Content-Type":"application/json","Accept":"application/json","Authorization": "Bearer " + MORPHEUS_TOKEN}
 MORPHEUS_VERIFY_SSL_CERT = False
 MORPHEUS_IDM_NAME = "Autenticazione con ARPA"
+AUTHORIZED_ROLES = ['TENANT_ADMIN_TOSC','System Admin']
 
 #Keycloak Globals
 KEYCLOAK_REST_CLIENT_ID = "rest-client"
@@ -77,6 +84,13 @@ if 'skip_snow_operations' in morpheus['customOptions']:
 else:
     SNOW_SKIP = False
 
+# SPC Portal db Globals
+PG_USER = "pf_toscana_user"
+PG_PASSWORD = str(Cypher(morpheus=morpheus, ssl_verify=False).get("secret/portal_db_password"))
+PG_HOST = "10.156.100.16"
+PG_PORT = 15432
+PG_DATABASE = "pf_toscana"
+
 
 #############
 # Functions #
@@ -97,6 +111,26 @@ def get_morpheus_current_tenant(morpheus_host, access_token):
     data = response.json()
     #print(json.dumps(data, indent=4))
     return { "tenant_name": data["user"]["account"]["name"], "tenant_id": data["user"]["account"]["id"] }
+
+
+# Check if current user has administrator roles
+def get_current_user(morpheus_host, access_token, role_list):
+
+    url = "https://%s/api/whoami" % (morpheus_host)
+    response = requests.get(url, headers=MORPHEUS_HEADERS, verify=MORPHEUS_VERIFY_SSL_CERT)
+    if not response.ok:
+        print("Error getting roles for current user: Response code %s: %s" % (response.status_code, response.text))
+        raise Exception("Error getting roles for current user: Response code %s: %s" % (response.status_code, response.text))
+
+    data = response.json()
+    
+    authorized = False    
+    for role in data["user"]["roles"]:
+        if role["authority"] in role_list:
+            authorized = True
+            break
+
+    return { "name": data["user"]["displayName"], "email": data["user"]["email"], "role": role["authority"], "authorized": authorized }
 
 
 # Get Morpheus Role ID by Name
@@ -396,6 +430,46 @@ def get_morpheus_idm_provider_settings(morpheus_host, access_token, parameter_na
     print("Parameter %s not found or Identity Source %s not existing in tenant %s..." % (parameter_name, MORPHEUS_IDM_NAME, tenant_id))
     return -1
 
+#----- SCT Portal -----    
+
+def delete_sct_portal_property(property_name):
+# Remove SCT Portal redirect property for the deleted tenant
+# Best effort - caught failures will not cause exceptions
+    try:
+        connection = psycopg2.connect(user=PG_USER,
+                                    password=PG_PASSWORD,
+                                    host=PG_HOST,
+                                    port=PG_PORT,
+                                    database=PG_DATABASE)
+        cursor = connection.cursor()
+
+    except (Exception, psycopg2.Error) as error:
+        print("Failed to connect to SCT Portal database for property deletion")
+        #raise Exception("Failed to connect to SCT Portal database for property deletion", error)        
+    
+    else:
+        print("Clearing SCT Portal configuration for %s" % property_name)
+        try:
+            sql_delete_query = """DELETE FROM DXC_PF_TOSCANA_SCT_PROPERTY WHERE nome = %s"""
+            cursor.execute(sql_delete_query, (property_name,))
+
+            connection.commit()
+            count = cursor.rowcount
+            if count > 0:
+                print("....%s Record deleted successfully from DXC_PF_TOSCANA_SCT_PROPERTY table" % (count))
+            else:
+                print("....%s Record deleted from DXC_PF_TOSCANA_SCT_PROPERTY table" % (count))
+
+        except (Exception, psycopg2.Error) as error:
+            print("....Failed to delete record from DXC_PF_TOSCANA_SCT_PROPERTY table")
+            #raise Exception("Failed to delete record from DXC_PF_TOSCANA_SCT_PROPERTY table", error)
+
+        finally:
+            # closing database connection.
+            if connection:
+                cursor.close()
+                connection.close()
+                print("....PostgreSQL connection is closed")
 
 
 ##################
@@ -411,7 +485,13 @@ else:
     if current_tenant["tenant_id"] != 1:
         print("Error: This script MUST be run within the Master Tenant!")
         raise Exception("Error: This script MUST be run within the Master Tenant!")
-    
+
+    # Check if user is authorized to run this script
+    requestor = get_current_user(MORPHEUS_HOST, MORPHEUS_TOKEN, AUTHORIZED_ROLES)
+    if requestor["authorized"] == False:
+        print("Error: You must have Admin role to run this script")
+        raise Exception("Error: You must have System Admin role to run this script")  
+
     ### SercviceNow ###
 
     if SNOW_SKIP:
@@ -477,6 +557,10 @@ else:
     # delete role
     print("Deleting Base Role with ID %s" % (tenant_role_id))
     delete_morpheus_object(MORPHEUS_HOST, "/api/roles/" + str(tenant_role_id), MORPHEUS_TOKEN)
+
+    
+    ### SCT Portal ###
+    delete_sct_portal_property("morpheus.tenant.redirect." + MORPHEUS_TENANT)
 
     
     print("Done.")
